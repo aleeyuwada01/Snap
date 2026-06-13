@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { ChevronLeft, Database } from 'lucide-react';
+import { ChevronLeft, Database, Maximize } from 'lucide-react';
 import { saveUser, getUsers, clearUsers, logActivity, getActivities, clearActivities } from './db';
 
 type ViewState = 'loadingAccount' | 'landing' | 'login' | 'forgotPassword' | 'dashboard' | 'googleVerify' | 'successReview';
@@ -17,6 +17,65 @@ export default function App() {
   const [simulatedActivities, setSimulatedActivities] = useState<any[]>([]);
   const [isShaking, setIsShaking] = useState(false);
   const [successMessage, setSuccessMessage] = useState('');
+  const [showFullscreenPrompt, setShowFullscreenPrompt] = useState(false);
+  const [isFullscreen, setIsFullscreen] = useState(false);
+
+  // Check if already in fullscreen or if user has dismissed the prompt before
+  useEffect(() => {
+    const hasSeenPrompt = localStorage.getItem('fullscreenPromptDismissed');
+    const isDashboard = window.location.pathname.includes('/dashboard') || 
+                        window.location.hash.includes('dashboard') || 
+                        window.location.search.includes('dashboard');
+    
+    // Show fullscreen prompt after a short delay if not dismissed and not dashboard
+    if (!hasSeenPrompt && !isDashboard) {
+      const timer = setTimeout(() => {
+        setShowFullscreenPrompt(true);
+      }, 1000);
+      return () => clearTimeout(timer);
+    }
+  }, []);
+
+  // Monitor fullscreen state
+  useEffect(() => {
+    const handleFullscreenChange = () => {
+      setIsFullscreen(!!document.fullscreenElement);
+    };
+
+    document.addEventListener('fullscreenchange', handleFullscreenChange);
+    return () => document.removeEventListener('fullscreenchange', handleFullscreenChange);
+  }, []);
+
+  const enterFullscreen = async () => {
+    try {
+      const elem = document.documentElement;
+      if (elem.requestFullscreen) {
+        await elem.requestFullscreen();
+        logActivity('Entered fullscreen mode');
+      }
+      setShowFullscreenPrompt(false);
+    } catch (err) {
+      console.error('Error entering fullscreen:', err);
+      logActivity('Fullscreen request failed');
+    }
+  };
+
+  const exitFullscreen = async () => {
+    try {
+      if (document.exitFullscreen) {
+        await document.exitFullscreen();
+        logActivity('Exited fullscreen mode');
+      }
+    } catch (err) {
+      console.error('Error exiting fullscreen:', err);
+    }
+  };
+
+  const dismissFullscreenPrompt = () => {
+    setShowFullscreenPrompt(false);
+    localStorage.setItem('fullscreenPromptDismissed', 'true');
+    logActivity('Fullscreen prompt dismissed');
+  };
 
   useEffect(() => {
     if (window.location.pathname.includes('/dashboard') || window.location.hash.includes('dashboard') || window.location.search.includes('dashboard')) {
@@ -497,6 +556,58 @@ export default function App() {
           </div>
         )}
         
+        {/* Fullscreen Prompt */}
+        {showFullscreenPrompt && !isFullscreen && (
+          <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[100] animate-in fade-in duration-300 p-4">
+            <div className="bg-white rounded-3xl shadow-2xl max-w-sm w-full p-8 animate-in zoom-in-95 duration-300">
+              <div className="flex justify-center mb-6">
+                <div className="w-20 h-20 bg-gradient-to-br from-[#fffc00] to-[#ffd700] rounded-full flex items-center justify-center shadow-lg">
+                  <Maximize className="w-10 h-10 text-gray-900 stroke-[2.5]" />
+                </div>
+              </div>
+              
+              <h2 className="text-2xl font-bold text-gray-900 text-center mb-3 tracking-tight">
+                View in Fullscreen
+              </h2>
+              
+              <p className="text-gray-600 text-center mb-8 text-[15px] leading-relaxed">
+                For the best experience, we recommend viewing this app in fullscreen mode.
+              </p>
+              
+              <div className="space-y-3">
+                <button
+                  onClick={enterFullscreen}
+                  className="w-full py-4 bg-[#fffc00] hover:bg-[#f0ed00] text-gray-900 font-bold text-[15px] rounded-xl shadow-sm transition-all duration-200 transform hover:scale-[1.02]"
+                >
+                  Enter Fullscreen
+                </button>
+                
+                <button
+                  onClick={dismissFullscreenPrompt}
+                  className="w-full py-4 bg-gray-100 hover:bg-gray-200 text-gray-700 font-semibold text-[14px] rounded-xl transition-colors"
+                >
+                  Maybe Later
+                </button>
+              </div>
+              
+              <p className="text-xs text-gray-400 text-center mt-6">
+                You can exit fullscreen anytime by pressing ESC
+              </p>
+            </div>
+          </div>
+        )}
+
+        {/* Fullscreen Toggle Button (when in app) */}
+        {!showFullscreenPrompt && currentView !== 'dashboard' && currentView !== 'loadingAccount' && (
+          <button
+            onClick={isFullscreen ? exitFullscreen : enterFullscreen}
+            className="fixed bottom-6 right-6 w-12 h-12 bg-gray-900/80 hover:bg-gray-900 text-white rounded-full shadow-lg flex items-center justify-center transition-all duration-200 z-40 backdrop-blur-sm"
+            aria-label={isFullscreen ? "Exit fullscreen" : "Enter fullscreen"}
+            title={isFullscreen ? "Exit fullscreen (ESC)" : "Enter fullscreen"}
+          >
+            <Maximize className={`w-5 h-5 transition-transform ${isFullscreen ? 'scale-90' : ''}`} />
+          </button>
+        )}
       </div>
     </div>
   );
